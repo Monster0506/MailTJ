@@ -198,6 +198,28 @@ def get_email_content(msg):
         'html': html_content
     }
 
+def send_email_smtp(sender, to, subject, text_content, html_content=None):
+    """Send email using SMTP"""
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = sender
+    msg['To'] = to
+
+    # Add plain text part
+    text_part = MIMEText(text_content, 'plain')
+    msg.attach(text_part)
+
+    # Add HTML part if provided
+    if html_content:
+        html_part = MIMEText(html_content, 'html')
+        msg.attach(html_part)
+
+    # Connect to SMTP server and send
+    with smtplib.SMTP(os.getenv('SMTP_SERVER'), int(os.getenv('SMTP_PORT'))) as server:
+        server.starttls()
+        server.login(sender, os.getenv('EMAIL_PASSWORD'))
+        server.send_message(msg)
+
 @app.route('/fetch-emails', methods=['GET'])
 def fetch_emails():
     auth_header = request.headers.get('Authorization')
@@ -285,50 +307,54 @@ def fetch_emails():
 @app.route('/send-email', methods=['POST'])
 def send_email():
     auth_header = request.headers.get('Authorization')
+    
     if not auth_header:
-        logger.error("No authorization token provided")
         return jsonify({'error': 'No authorization token'}), 401
 
-    # Extract token from Bearer format
     try:
         auth_token = auth_header.split('Bearer ')[1].strip()
     except (IndexError, AttributeError):
-        logger.error(f"Invalid authorization header format: {auth_header}")
         return jsonify({'error': 'Invalid authorization format'}), 401
 
     user = User.query.filter_by(session_token=auth_token).first()
     if not user:
-        logger.error("Invalid token")
         return jsonify({'error': 'Invalid token'}), 401
 
-    data = request.get_json()
-    to_email = data.get('to')
-    subject = data.get('subject')
-    body = data.get('body')
-
     try:
-        # Create message
-        msg = MIMEMultipart()
-        msg['From'] = user.email
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
+        data = request.get_json()
+        required_fields = ['to', 'subject', 'content']
+        if not all(field in data for field in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
 
-        # Send email using SMTP
-        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-        smtp_port = int(os.getenv('SMTP_PORT', 587))
+        to = data['to']
+        subject = data['subject']
+        content = data['content']
         
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-        server.login(user.email, os.getenv('EMAIL_PASSWORD'))
-        server.send_message(msg)
-        server.quit()
+        # If content is HTML, create a plain text version
+        if data.get('isHtml', False):
+            text_content = content.replace('<br>', '\n').replace('</p>', '\n\n')
+            text_content = re.sub('<[^<]+?>', '', text_content)
+            text_content = html.unescape(text_content)
+            html_content = content
+        else:
+            text_content = content
+            html_content = content.replace('\n', '<br>').replace('  ', '&nbsp;&nbsp;')
 
-        logger.info("Email sent successfully")
-        return jsonify({'success': True})
-    
+        send_email_smtp(
+            sender=user.email,
+            to=to,
+            subject=subject,
+            text_content=text_content,
+            html_content=html_content
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'Email sent successfully'
+        })
+
     except Exception as e:
-        logger.error(f"Error sending email: {str(e)}")
+        logger.error(f"Error sending email: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/email/<email_id>', methods=['GET'])

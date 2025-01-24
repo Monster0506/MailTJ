@@ -90,18 +90,21 @@ export const fetchEmails = async (page = 1, perPage = 20) => {
 };
 
 export const sendEmail = async (emailData) => {
-  const token = localStorage.getItem('authToken');
-  if (!token) {
-    throw new Error('No authentication token found');
-  }
-
   try {
-    console.log('Sending email:', emailData);
-    const response = await api.post('/send-email', emailData);
+    const token = localStorage.getItem('authToken');
+    const response = await axios.post(
+      `${API_BASE_URL}/send-email`,
+      emailData,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
     return response.data;
   } catch (error) {
-    console.error('Send email error:', error);
-    throw error;
+    throw new Error(error.response?.data?.error || 'Failed to send email');
   }
 };
 
