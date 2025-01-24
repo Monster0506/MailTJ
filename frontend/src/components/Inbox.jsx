@@ -12,10 +12,13 @@ import {
   ListItemButton,
   Box,
   Button,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
+import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { fetchEmails } from '../services/api';
+import { fetchEmails, refreshCache } from '../services/api';
 
 function Inbox() {
   const navigate = useNavigate();
@@ -25,6 +28,7 @@ function Inbox() {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadEmails = async (pageNum, append = false) => {
     try {
@@ -63,6 +67,18 @@ function Inbox() {
     loadEmails(page + 1, true);
   };
 
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true);
+      await refreshCache();
+      await loadEmails(1);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleEmailClick = (emailId) => {
     navigate(`/email/${emailId}`);
   };
@@ -87,9 +103,21 @@ function Inbox() {
   return (
     <Container maxWidth="md" sx={{ mt: 4 }}>
       <Paper elevation={3} sx={{ p: 2 }}>
-        <Typography variant="h4" gutterBottom>
-          Inbox
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="h4" gutterBottom>
+            Inbox
+          </Typography>
+          <Tooltip title="Reload emails">
+            <IconButton 
+              onClick={handleRefresh} 
+              disabled={refreshing}
+              color="primary"
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
         <List>
           {emails && emails.length > 0 ? (
             emails.map((email, index) => (

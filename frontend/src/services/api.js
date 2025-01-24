@@ -139,4 +139,22 @@ export const getEmail = async (emailId) => {
     }
   };
 
+export const refreshCache = async () => {
+  try {
+    const token = localStorage.getItem('authToken');
+    const response = await axios.post(
+      `${API_BASE_URL}/refresh-cache`,
+      {},
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || 'Failed to refresh cache');
+  }
+};
+
 export default api;

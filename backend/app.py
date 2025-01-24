@@ -427,5 +427,37 @@ def update_email(email_id):
         logger.error(f"Error updating email: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/refresh-cache', methods=['POST'])
+def refresh_cache():
+    auth_header = request.headers.get('Authorization')
+    
+    if not auth_header:
+        return jsonify({'error': 'No authorization token'}), 401
+
+    try:
+        auth_token = auth_header.split('Bearer ')[1].strip()
+    except (IndexError, AttributeError):
+        return jsonify({'error': 'Invalid authorization format'}), 401
+
+    user = User.query.filter_by(session_token=auth_token).first()
+    if not user:
+        return jsonify({'error': 'Invalid token'}), 401
+
+    try:
+        # Clear all cache keys for this user
+        pattern = f"emails:{user.email}:*"
+        for key in redis_client.scan_iter(pattern):
+            redis_client.delete(key)
+        
+        # Start background cache update for first page
+        Thread(target=background_cache_update, 
+              args=(user.email, os.getenv('EMAIL_PASSWORD'), 1)).start()
+        
+        return jsonify({'success': True, 'message': 'Cache refreshed successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error refreshing cache: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
