@@ -1,0 +1,6 @@
+flask
+Flask-SQLAlchemy
+Flask-Cors
+python-dotenv
+PyJWT
+redis
